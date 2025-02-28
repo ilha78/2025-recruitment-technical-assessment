@@ -126,53 +126,9 @@ def create_entry():
 
 
 # [TASK 3] ====================================================================
-# This helper function recursively computes the summary requied
-# Note that ingredients are leaf nodes and we can cache the queries to each 
-# node since different recipes may depend on the same recipe and/or ingredient
-# We should also consider a case where recipes have circular dependencies via 
-# directed cycle check. Note that the name must be a type Recipe
-# each call returns {ingredient freq}
-# O(|recipes|*|ingredients|) since we must repeatedly visit ingredients for 
-# uncached recipes since the quantites of which the ingredients are required 
-# may be different across different recipes
-def recursive_summary(name, quantity):
-	if name in recipe_time_taken:
-		return recipe_time_taken[name]
-	
-	# parent recipe's ingredient freq table
-	ingredient_freq = {}
-	# dfs neighbour search
-	for item in cookbook[name].required_items:
-		if isinstance(cookbook[item.name], Ingredient):
-			ingredient_freq[item.name] = item.quantity
-		else:
-			child_recipe = recursive_summary(item.name, item.quantity)
-			# aggregate the child recipe's freq to the parent receipe's freq
-			for k, v in child_recipe:
-				if k in ingredient_freq:
-					ingredient_freq[k] += quantity * v
-				else:
-					ingredient_freq[k] = quantity * v
-		
-	return ingredient_freq
-	
-	
-
-
-
 # Endpoint that returns a summary of a recipe that corresponds to a query name
 @app.route('/summary', methods=['GET'])
 def summary():
-	query = request.args
-	name = query.get('name')
-	if not name in cookbook:
-		return 'name not found in cook book', 400
-	elif not isinstance(cookbook[name], Recipe):
-		return 'type is not a recipe', 400
-	
-	# we want the summary for a single instance of the recipe
-	quantity = 1
-	res = recursive_summary(name, quantity)
 
 	return 'not implemented', 500
 
