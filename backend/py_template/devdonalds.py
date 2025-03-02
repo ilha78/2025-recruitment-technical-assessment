@@ -136,12 +136,17 @@ def create_entry():
 # Time Complexity:
 # O(|recipes|*|ingredients|) since we must repeatedly aggregate the ingredients 
 # for uncached recipes since the quantites of which the ingredients are 
-# required may be different across different recipes.
-def recursive_summary(name):
+# required may be different across different recipes. This is assuming dict 
+# and set are O(1) amortised
+def recursive_summary(name, curr_path):
 	# check that recipe exists in cookbook
 	if name in recipe_ingredient_cache:
 		return recipe_ingredient_cache[name], 200
 	
+	if name in curr_path:
+		return 'ciruclar dependencies of recipes', 400
+	curr_path.add(name)
+
 	# parent recipe's ingredient freq table
 	ingredient_freq = {}
 
@@ -157,7 +162,7 @@ def recursive_summary(name):
 
 		# case: item is a recipe
 		else:
-			content, status_code = recursive_summary(item.name)
+			content, status_code = recursive_summary(item.name, curr_path)
 			# if error occurred, repeatedly return the error to caller
 			if status_code != 200:
 				message = content
@@ -176,7 +181,7 @@ def recursive_summary(name):
 					ingredient_freq[k] = item.quantity * v
 
 	recipe_ingredient_cache[name] = ingredient_freq
-
+	curr_path.remove(name)
 	return ingredient_freq, 200
 	
 
@@ -190,7 +195,9 @@ def summary():
 	elif not isinstance(cookbook[name], Recipe):
 		return 'type is not a recipe', 400
 	
-	content, status_code = recursive_summary(name)
+	# to detect circular dependencies of recipes
+	curr_path = set()
+	content, status_code = recursive_summary(name, curr_path)
 	# check for any errors that occurred in the recursion
 	if status_code != 200:
 		message = content
