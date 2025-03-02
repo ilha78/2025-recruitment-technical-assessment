@@ -33,7 +33,7 @@ cookbook = {}
 
 # We are under the assumption that recipe dependencies cannot be moditfied
 # upon creation. Hence, cache the time taken and freq for each recipe to avoid
-# repetitive computation
+# repetitive computation => O(1) store and lookup
 # name to tuple {ingredient freq}
 recipe_ingredient_cache = {}
 
@@ -44,7 +44,7 @@ def parse():
 	recipe_name = data.get('input', '')
 	parsed_name = parse_handwriting(recipe_name)
 	if parsed_name is None:
-		return 'Invalid recipe name', 400
+		return 'invalid recipe name', 400
 	return jsonify({'msg': parsed_name}), 200
 
 # [TASK 1] ====================================================================
@@ -131,34 +131,53 @@ def create_entry():
 # node since different recipes may depend on the same recipe and/or ingredient
 # We should also consider a case where recipes have circular dependencies via 
 # directed cycle check. Note that the name must be a type Recipe
-# each call returns {ingredient freq}
-# O(|recipes|*|ingredients|) since we must repeatedly visit ingredients for 
-# uncached recipes since the quantites of which the ingredients are required 
-# may be different across different recipes
+# each call returns {ingredient freq}.
+#
+# Time Complexity:
+# O(|recipes|*|ingredients|) since we must repeatedly aggregate the ingredients 
+# for uncached recipes since the quantites of which the ingredients are 
+# required may be different across different recipes.
 def recursive_summary(name):
 	# check that recipe exists in cookbook
-
 	if name in recipe_ingredient_cache:
-		return recipe_ingredient_cache[name]
+		return recipe_ingredient_cache[name], 200
 	
 	# parent recipe's ingredient freq table
-	ingredient_freq = {"this": "ddff"}
+	ingredient_freq = {}
+
 	# dfs neighbour search
 	for item in cookbook[name].required_items:
-		if isinstance(cookbook[item.name], Ingredient):
-			# check that ingredient exists in cookbook
+		# check that item exists in cookbook
+		if not item.name in cookbook:
+			return 'item does not exist in cookbook', 400
 
+		# case: item is a ingredient
+		if isinstance(cookbook[item.name], Ingredient):
 			ingredient_freq[item.name] = item.quantity
+
+		# case: item is a recipe
 		else:
-			child_recipe = recursive_summary(item.name)
+			content, status_code = recursive_summary(item.name)
+			# if error occurred, repeatedly return the error to caller
+			if status_code != 200:
+				message = content
+				return message, status_code 		
+
+			child_recipe = content
 			# aggregate the child recipe's freq to the parent receipe's freq
-			for k, v in child_recipe:
+			# takes O(#ingredients)
+			# Note: to make it more efficient consider using threads
+			# to divide up the work of aggregating
+			for k, v in child_recipe.items():
+				# make sure to mult by the quantity (edge weights)
 				if k in ingredient_freq:
 					ingredient_freq[k] += item.quantity * v
 				else:
 					ingredient_freq[k] = item.quantity * v
-		
-	return ingredient_freq
+
+	recipe_ingredient_cache[name] = ingredient_freq
+
+	return ingredient_freq, 200
 	
 
 # Endpoint that returns a summary of a recipe that corresponds to a query name
@@ -171,19 +190,32 @@ def summary():
 	elif not isinstance(cookbook[name], Recipe):
 		return 'type is not a recipe', 400
 	
-	ingredient_freq = recursive_summary(name)
-	# required_items = [{"name": k, "quantity": v} for k, v in ingredient_freq.items()]
-	# cook_time = 0
-	# for k, v in ingredient_freq.items():
-	# 	cook_time += cookbook[k].cook_time * v
+	content, status_code = recursive_summary(name)
+	# check for any errors that occurred in the recursion
+	if status_code != 200:
+		message = content
+		return message, status_code
 
-	# summary = { "name": name, "cookTime": cook_time, "ingredients": required_items }
+	ingredient_freq = content
+	required_items = [
+		{"name": k, "quantity": v} for k, v in ingredient_freq.items()
+	]
+	cook_time = 0
+	for k, v in ingredient_freq.items():
+		cook_time += cookbook[k].cook_time * v
+
+	summary = {
+		"name": name, 
+		"cookTime": cook_time, 
+		"ingredients": required_items
+	}
 	
-	return "fff", 200
+	return summary, 200
 
 @app.route('/clear', methods=['POST'])
 def clear():
 	cookbook .clear()
+	recipe_ingredient_cache.clear()
 	return 'clear cookbook success', 200
 
 # =============================================================================
